@@ -16,6 +16,9 @@ import java.util.stream.IntStream;
 
 public class MainVerticle extends AbstractVerticle {
 
+	/**
+	 * Static attributes, change them to configure the connection to your PostgreSQL database
+	 */
 	private static final String host = "localhost";
 	private static final Integer port = 5432;
 	private static final String database = "test";
@@ -25,6 +28,11 @@ public class MainVerticle extends AbstractVerticle {
 
 	private static final Integer nbEntities = 65536;
 
+	/**
+	 * Create the connection pool to the PostgreSQL database
+	 * 
+	 * @return The pool as a Single
+	 */
 	private Single<PgPool> createPool() {
 		return SingleHelper.toSingle(handler -> {
 
@@ -37,25 +45,40 @@ public class MainVerticle extends AbstractVerticle {
 
 			PoolOptions poolOptions = new PoolOptions();
 
+			// Create the pool
 			PgPool pool = PgPool.pool(vertx, connectOptions, poolOptions);
 			handler.handle(Future.succeededFuture(pool));
 		});
 	}
 
+	/**
+	 * Run the test creating MainVerticle.nbEntities
+	 * 
+	 * @param pool The pool to use
+	 * @return The Completable result
+	 */
 	private Completable runTest(PgPool pool) {
+		// The tuple we'll use with the preparedQuery
 		Tuple tuple = Tuple.tuple();
+		// Create the value string, should looks like ($1), ($2), ($3) etc...
 		String valuesString = IntStream.range(0, MainVerticle.nbEntities)
 			.mapToObj(index -> {
 				tuple.addString(String.format("entity_%d", index));
 				return String.format("($%d)", tuple.size());
 			})
 			.collect(Collectors.joining(", "));
+		// The query as a string, we're adding the table name and values here
 		String query = String.format("INSERT into %s (name) VALUES %s", MainVerticle.table, valuesString);
 		return pool.preparedQuery(query)
 			.rxExecute(tuple)
 			.ignoreElement();
 	}
 
+	/**
+	 * Start this verticle
+	 * 
+	 * @Return The completable
+	 */
 	@Override
 	public Completable rxStart() {
 		return createPool()
